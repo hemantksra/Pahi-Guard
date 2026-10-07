@@ -13,6 +13,7 @@ from app.ml.features import (
     RISKY_TLDS,
     SHORTENER_DOMAINS,
     UrlFeatureExtractor,
+    brand_impersonation_features,
     is_ip_host,
     lexical_feature_dict,
     normalize_url,
@@ -84,6 +85,7 @@ class PhishingModel:
                 "HTTPS detection",
                 "suspicious keyword count",
                 "brand impersonation tokens",
+                "brand typo-squatting detection",
                 "URL shortener detection",
                 "risky TLD detection",
                 "entropy",
@@ -143,6 +145,7 @@ class PhishingModel:
         host = (parsed.hostname or "").lower()
         path_query = f"{parsed.path}?{parsed.query}".lower()
         features = lexical_feature_dict(normalized)
+        brand_typo, embedded_brand = brand_impersonation_features(host)
         parts = [part for part in host.split(".") if part]
         tld = parts[-1] if parts else ""
         signals: list[Signal] = []
@@ -168,6 +171,10 @@ class PhishingModel:
             signals.append(Signal(label="Noisy URL pattern", detail="Many separators or digits can indicate generated phishing infrastructure.", impact="medium"))
         if "xn--" in host:
             signals.append(Signal(label="Punycode domain", detail="Punycode can hide lookalike characters in internationalized domains.", impact="high"))
+        if brand_typo:
+            signals.append(Signal(label="Possible brand typo-squatting", detail="A hostname label closely resembles a protected brand name.", impact="high"))
+        elif embedded_brand:
+            signals.append(Signal(label="Brand embedded in hostname", detail="A brand name appears inside a longer hostname label.", impact="medium"))
         if any(brand in host for brand in BRAND_TOKENS) and features["subdomain_count"] > 0:
             signals.append(Signal(label="Brand in subdomain", detail="A brand token appears outside the registered domain.", impact="medium"))
         if len(normalized) > 120:
