@@ -41,6 +41,21 @@ PHISHING_BRANDS = [
     "whatsapp",
 ]
 
+# Typo-squatted domains on common TLDs: these are intentionally distinct
+# from the legitimate brand domains above and do not rely on risky TLDs.
+TYPO_SQUAT_DOMAINS = [
+    "hfdc-bank.com",
+    "hdfc-banking.com",
+    "paypaI.com",
+    "g00gle.com",
+    "amazonn.com",
+    "micros0ft.com",
+    "faceboook.com",
+    "netfIix.com",
+    "icicibank-login.com",
+    "axixbank.com",
+]
+
 SUSPICIOUS_WORDS = [
     "verify",
     "secure",
@@ -90,6 +105,11 @@ def build_training_data(seed: int = 42) -> tuple[list[str], list[int]]:
 
             host = f"{brand}.{words[0]}.{words[1]}.{rng.choice(['security', 'service', 'center'])}.{tld}"
             urls.append(f"https://{host}/login/confirm-password")
+            labels.append(1)
+
+    for domain in TYPO_SQUAT_DOMAINS:
+        for path in ("", "/login", "/account/verify"):
+            urls.append(f"https://{domain}{path}")
             labels.append(1)
 
     ip_hosts = ["185.14.29.41", "91.210.107.88", "45.77.129.201", "103.22.190.12"]

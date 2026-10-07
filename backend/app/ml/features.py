@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from difflib import SequenceMatcher
 from typing import Iterable
 from urllib.parse import urlparse
 
@@ -68,6 +69,31 @@ SHORTENER_DOMAINS = {
 
 RISKY_TLDS = {"zip", "mov", "click", "top", "xyz", "work", "support", "live", "quest"}
 
+BRAND_ROOTS = {
+    "amazon", "apple", "axisbank", "facebook", "google", "hdfc", "icici",
+    "instagram", "microsoft", "netflix", "paypal", "sbi", "spotify", "whatsapp",
+}
+
+
+def brand_impersonation_features(host: str) -> tuple[float, float]:
+    """Identify hostname labels that typo or embed a protected brand name."""
+    typo_match = False
+    embedded_brand = False
+    for label in (part.lower() for part in host.split(".") if part):
+        normalized = re.sub(r"[^a-z0-9]", "", label)
+        if not normalized:
+            continue
+        for brand in BRAND_ROOTS:
+            if normalized == brand:
+                continue
+            # Restrict near-matches to longer brand roots to avoid flagging
+            # short labels such as "sbi" based on a coincidental character.
+            if len(brand) >= 4 and SequenceMatcher(None, normalized, brand).ratio() >= 0.8:
+                typo_match = True
+            elif brand in normalized:
+                embedded_brand = True
+    return float(typo_match), float(embedded_brand)
+
 
 def normalize_url(url: str) -> str:
     value = url.strip()
@@ -117,6 +143,7 @@ def lexical_feature_dict(url: str) -> dict[str, float]:
     subdomain_count = max(len(parts) - 2, 0)
     brand_hits = count_tokens(host, BRAND_TOKENS)
     suspicious_hits = count_tokens(normalized, SUSPICIOUS_TOKENS)
+    brand_typo, embedded_brand = brand_impersonation_features(host)
 
     return {
         "url_length": float(len(normalized)),
@@ -133,6 +160,8 @@ def lexical_feature_dict(url: str) -> dict[str, float]:
         "subdomain_count": float(subdomain_count),
         "suspicious_token_count": float(suspicious_hits),
         "brand_token_count": float(brand_hits),
+        "brand_typo": brand_typo,
+        "embedded_brand": embedded_brand,
         "shortener": float(host in SHORTENER_DOMAINS),
         "risky_tld": float(tld in RISKY_TLDS),
         "punycode": float("xn--" in host),
@@ -156,6 +185,8 @@ class UrlFeatureExtractor(BaseEstimator, TransformerMixin):
         "subdomain_count",
         "suspicious_token_count",
         "brand_token_count",
+        "brand_typo",
+        "embedded_brand",
         "shortener",
         "risky_tld",
         "punycode",
